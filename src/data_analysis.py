@@ -18,10 +18,14 @@ if not os.path.isfile(file_name):
 
 conn = sqlite3.connect(file_name)
 
+# loading dataframes
 player_df = pd.read_sql_query("SELECT * FROM Player;", conn)
 match_df = pd.read_sql_query("SELECT * FROM Match;", conn)
 player_att_df = pd.read_sql_query("SELECT * FROM Player_Attributes;", conn)
+team_df = pd.read_sql_query("SELECT * FROM Team;", conn)
+team_att_df = pd.read_sql_query("SELECT * FROM Team_Attributes;", conn)
 
+# extracting mean rating for each player and creating a dict
 player_df['rating'] = player_df['player_api_id'].apply(lambda player_id: player_att_df[player_att_df['player_api_id'] == player_id]['overall_rating'].mean())
 ratings_dict = dict([(id, rating) for id, rating in zip(player_df.player_api_id, player_df.rating)])
 
@@ -35,20 +39,19 @@ rating_cols = home_rating_cols + away_rating_cols
 
 match_df = match_df.dropna(subset=player_cols)
 match_df[rating_cols] = match_df[player_cols].apply(lambda row: row.apply(lambda pid: ratings_dict[pid]))
+match_df['home_rating'] = match_df[home_rating_cols].mean(axis = 1)
+match_df['away_rating'] = match_df[away_rating_cols].mean(axis = 1)
 
 # wins
-team_df = pd.read_sql_query("SELECT * FROM Team;", conn)
-
-team_att_df = pd.read_sql_query("SELECT * FROM Team_Attributes;", conn)
-
-
 match_df['home_win'] = match_df.apply(lambda row: 1 if row['home_team_goal'] > row['away_team_goal'] else 0, axis = 1)
 match_df['away_win'] = match_df.apply(lambda row: 1 if row['home_team_goal'] < row['away_team_goal'] else 0, axis = 1)
-home_winners = match_df.groupby('home_team_api_id')['home_win'].sum()
-away_winners = match_df.groupby('away_team_api_id')['away_win'].sum()
+home_winners = match_df.groupby('home_team_api_id').agg({'home_win': np.sum, 'home_rating': np.mean}) #['home_win'].sum()
+away_winners = match_df.groupby('away_team_api_id').agg({'away_win': np.sum, 'away_rating': np.mean}) #['away_win'].sum()
 
-team_att_df['n_win'] = team_att_df['team_api_id'].apply(lambda team_id: home_winners[team_id] + away_winners[team_id])
+team_df['n_win'] = team_df['team_api_id'].apply(lambda team_id: home_winners.loc[team_id]['home_win'] + away_winners.loc[team_id]['away_win'] if team_id in home_winners.index else np.nan)
+team_df['rating'] = team_df['team_api_id'].apply(lambda team_id: np.mean([home_winners.loc[team_id]['home_rating'], away_winners.loc[team_id]['away_rating']]) if team_id in home_winners.index else np.nan)
 
+team_df = team_df.dropna(subset=['n_win'])
 
 # test
 team_att_df[team_att_df['team_api_id'] == 8650]['n_win']
@@ -56,7 +59,7 @@ match_df[match_df['home_team_api_id'] == 8650][['home_win', 'home_team_goal', 'a
 
 #team_df = team_att_df.groupby('team_api_id')['n_win'].mean()
 
-team_df['n_win'] = team_df['team_api_id'].apply(lambda team_id: team_att_df[team_att_df['team_api_id'] == team_id]['n_win'].mean())
+
 team_df['shooting'] = team_df['team_api_id'].apply(lambda team_id: team_att_df[team_att_df['team_api_id'] == team_id]['chanceCreationShooting'].mean())
 team_df['defence'] = team_df['team_api_id'].apply(lambda team_id: team_att_df[team_att_df['team_api_id'] == team_id]['defenceAggression'].mean())
 team_df = team_df.dropna(subset=['shooting'])
@@ -64,8 +67,7 @@ team_df = team_df.dropna(subset=['defence'])
 
 plot_series = team_df.sort_values('n_win')
 
-plt.plot(plot_series['n_win'], plot_series['shooting'], linewidth=2)
-plt.plot(plot_series['n_win'], plot_series['defence'], linewidth=2)
+plt.plot(plot_series['n_win'], plot_series['rating'], linewidth=2)
 plt.xlabel('Wins')
 plt.ylabel('Shooting')
 plt.tight_layout()
