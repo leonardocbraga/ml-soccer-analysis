@@ -20,7 +20,7 @@ conn = sqlite3.connect(file_name)
 
 # loading dataframes
 player_df = pd.read_sql_query("SELECT * FROM Player;", conn)
-match_df = pd.read_sql_query("SELECT * FROM Match WHERE league_id = 21518;", conn)
+match_df = pd.read_sql_query("SELECT * FROM Match;", conn)
 player_att_df = pd.read_sql_query("SELECT * FROM Player_Attributes;", conn)
 team_df = pd.read_sql_query("SELECT * FROM Team;", conn)
 team_att_df = pd.read_sql_query("SELECT * FROM Team_Attributes;", conn)
@@ -30,12 +30,17 @@ pre_process_win(match_df)
 
 home_wins = match_df[match_df['home_win'] == 1]
 away_wins = match_df[match_df['away_win'] == 1]
-plt.plot(away_wins['home_rating'], away_wins['away_rating'], 'bo', home_wins['home_rating'], home_wins['away_rating'], 'ro')
-plt.axis([70, 80, 70, 80])
+plt.plot(away_wins['home_rating'], away_wins['away_rating'], 'bs', home_wins['home_rating'], home_wins['away_rating'], 'r8', markersize=4)
+#plt.axis([70, 80, 70, 80])
 plt.xlabel('Home')
 plt.ylabel('Away')
 plt.tight_layout()
 plt.show()
+
+anomalies = away_wins[away_wins['away_rating'] - away_wins['home_rating'] < -10]
+home_team = team_df[team_df['team_api_id'] == 8634]
+away_team = team_df[team_df['team_api_id'] == 9864]
+
 
 team_df['shooting'] = team_df['team_api_id'].apply(lambda team_id: team_att_df[team_att_df['team_api_id'] == team_id]['chanceCreationShooting'].mean())
 team_df['defence'] = team_df['team_api_id'].apply(lambda team_id: team_att_df[team_att_df['team_api_id'] == team_id]['defenceAggression'].mean())
